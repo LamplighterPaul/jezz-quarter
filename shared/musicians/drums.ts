@@ -118,6 +118,14 @@ export function assembleDrums(
     heard.barsSoFar === 0 || sampledNoul(answers, 'tempo_change', seed)
   const bpm = changeTempo ? desired : heard.bpm
   const decisions: Decision[] = []
+  const tempoChangeDecision = decide(
+    'drums',
+    'tempo_change',
+    'Change tempo',
+    changeTempo ? 'yes' : 'no',
+    answers.tempo_change,
+  )
+  if (tempoChangeDecision) decisions.push(tempoChangeDecision)
   const tempoDecision = decide(
     'drums',
     'tempo',

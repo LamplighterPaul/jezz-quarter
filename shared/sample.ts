@@ -57,6 +57,8 @@ export function sampledChoice(
     key,
     decision: {
       id,
+      type: 'choice',
+      modelPicked: a.choice,
       seat: 'piano',
       label: '',
       picked: key,
@@ -104,6 +106,8 @@ export function decide(
   if (a.type === 'choice')
     return {
       id,
+      type: a.type,
+      modelPicked: a.choice,
       seat,
       label,
       picked,
@@ -113,6 +117,8 @@ export function decide(
   if (a.type === 'score')
     return {
       id,
+      type: a.type,
+      score: a.score,
       seat,
       label,
       picked,
@@ -121,6 +127,7 @@ export function decide(
     }
   return {
     id,
+    type: a.type,
     seat,
     label,
     picked,

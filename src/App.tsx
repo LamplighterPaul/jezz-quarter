@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { Bar, Seat, Snapshot } from '../shared/types.ts'
 import { Player } from './audio/player.ts'
 import { Stage, type PerformanceState } from './Stage.tsx'
+import { DebugMixer } from './DebugMixer.tsx'
 
 const SEATS: Seat[] = ['horn', 'bass', 'piano', 'drums']
 const NAMES: Record<Seat, string> = {
   piano: 'Piano',
-  bass: 'Double bass',
+  bass: 'Bass',
   drums: 'Drums',
   horn: 'Horn',
 }
@@ -26,8 +27,8 @@ function Speaker({ muted }: { muted: boolean }) {
       fill="none"
       stroke="currentColor"
       strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      strokeLinecap="square"
+      strokeLinejoin="miter"
       aria-hidden="true"
     >
       <path d="M11 5 6 9H3v6h3l5 4z" />
@@ -44,6 +45,7 @@ function Speaker({ muted }: { muted: boolean }) {
 }
 
 export function App() {
+  const debug = new URLSearchParams(window.location.search).has('debug')
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [bar, setBar] = useState<Bar | null>(null)
   const [muted, setMuted] = useState(true)
@@ -225,94 +227,113 @@ export function App() {
         </div>
       </section>
 
-      <section className="band" aria-label="What the musicians are doing">
-        {SEATS.map((seat, index) => {
-          const part = bar?.parts[seat]
-          const resting = !playing || !part || part.rest
-          const decisions =
-            bar?.decisions
-              .filter((d) => d.seat === seat)
-              .filter(
-                (d) =>
-                  !['rest', 'wander', 'fill', 'tempo_change'].includes(d.id),
-              )
-              .slice(0, 4) ?? []
-          return (
-            <article
-              className={`musician musician-${seat}${resting ? ' is-resting' : ''}`}
-              key={seat}
-            >
-              <div className="musician-heading">
-                <span className="seat-number">0{index + 1}</span>
-                <h2>{NAMES[seat]}</h2>
-                <span
-                  className="note-meter"
-                  ref={(node) => {
-                    meters.current[seat] = node
-                  }}
-                  aria-hidden="true"
-                >
-                  <i />
-                  <i />
-                  <i />
-                  <i />
+      <div className="game-console">
+        <section className="band" aria-label="What the musicians are doing">
+          {SEATS.map((seat, index) => {
+            const part = bar?.parts[seat]
+            const resting = !playing || !part || part.rest
+            const decisions =
+              bar?.decisions
+                .filter((d) => d.seat === seat)
+                .filter(
+                  (d) =>
+                    !['rest', 'wander', 'fill', 'tempo_change'].includes(d.id),
+                )
+                .slice(0, 4) ?? []
+            return (
+              <article
+                className={`musician musician-${seat}${resting ? ' is-resting' : ''}`}
+                key={seat}
+              >
+                <div className="musician-heading">
+                  <span className="portrait" aria-hidden="true">
+                    <span>0{index + 1}</span>
+                  </span>
+                  <h2>{NAMES[seat]}</h2>
+                  <span
+                    className="note-meter"
+                    ref={(node) => {
+                      meters.current[seat] = node
+                    }}
+                    aria-hidden="true"
+                  >
+                    <i />
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                </div>
+                <p className="heard">
+                  {!connected
+                    ? 'Listening for the room…'
+                    : part
+                      ? part.rest
+                        ? 'Leaving a little space.'
+                        : part.heard
+                      : WAITING[seat] + '…'}
+                </p>
+                <div className="decisions">
+                  {decisions.map((d) => (
+                    <div key={d.id}>
+                      <span>{d.label}</span>
+                      <span>{d.picked.replace(/_/g, ' ')}</span>
+                    </div>
+                  ))}
+                </div>
+                <span className="playing-state">
+                  <span />
+                  {!bar
+                    ? 'Taking their place'
+                    : resting
+                      ? 'Listening'
+                      : 'Playing'}
                 </span>
-              </div>
-              <p className="heard">
-                {!connected
-                  ? 'Listening for the room…'
-                  : part
-                    ? part.rest
-                      ? 'Leaving a little space.'
-                      : part.heard
-                    : WAITING[seat] + '…'}
-              </p>
-              <div className="decisions">
-                {decisions.map((d) => (
-                  <div key={d.id}>
-                    <span>{d.label}</span>
-                    <span>{d.picked.replace(/_/g, ' ')}</span>
-                  </div>
-                ))}
-              </div>
-              <span className="playing-state">
-                <span />
-                {!bar
-                  ? 'Taking their place'
-                  : resting
-                    ? 'Listening'
-                    : 'Playing'}
-              </span>
-            </article>
-          )
-        })}
-      </section>
-      <div className="audience-controls">
-        <span className="audience-caption">Let them hear you.</span>
-        <div className="reaction-buttons">
-          <button
-            onClick={() => react('cheer')}
-            disabled={!playing || !bar || cooldown > 0 || reactionPending}
-            title="Approve the last few bars"
-          >
-            Cheer <span aria-hidden="true">↑</span>
-          </button>
-          <button
-            onClick={() => react('boo')}
-            disabled={!playing || !bar || cooldown > 0 || reactionPending}
-            title="Ask for a fresh direction"
-          >
-            Boo <span aria-hidden="true">↓</span>
-          </button>
+              </article>
+            )
+          })}
+        </section>
+        <div className="audience-controls">
+          <span className="audience-caption">What’ll it be?</span>
+          <div className="reaction-buttons">
+            <button onClick={() => void toggleSound()} disabled={soundBusy}>
+              {muted ? 'Listen' : 'Mute'}
+            </button>
+            <a href="#about" className="pixel-button">
+              Look at
+            </a>
+            <button
+              onClick={() => react('cheer')}
+              disabled={!playing || !bar || cooldown > 0 || reactionPending}
+              title="Approve the last few bars"
+            >
+              Cheer
+            </button>
+            <button
+              onClick={() => react('boo')}
+              disabled={!playing || !bar || cooldown > 0 || reactionPending}
+              title="Ask for a fresh direction"
+            >
+              Boo
+            </button>
+          </div>
+          <span className="reaction-notice" role="status">
+            {reactionPending
+              ? 'Sending…'
+              : cooldown
+                ? `${reactionNotice} Again in ${cooldown}s.`
+                : reactionNotice || 'One reaction every 30 seconds.'}
+          </span>
         </div>
-        <span className="reaction-notice" role="status">
-          {reactionPending
-            ? 'Sending…'
-            : cooldown
-              ? `${reactionNotice} Again in ${cooldown}s.`
-              : reactionNotice || 'One reaction every 30 seconds.'}
-        </span>
       </div>
+      {debug && (
+        <DebugMixer
+          bar={bar}
+          muted={muted}
+          busy={soundBusy}
+          onSound={() => void toggleSound()}
+          onMix={(mix) => player.current?.setMix(mix)}
+        />
+      )}
       {error && (
         <p className="room-error" role="status">
           {error}
@@ -324,8 +345,9 @@ export function App() {
         </p>
       )}
 
-      <footer>
+      <footer id="about">
         <div className="about">
+          <span className="panel-label">ABOUT THIS ROOM</span>
           <h1>
             Jezz Quarter<span>Four minds. One room.</span>
           </h1>
@@ -334,9 +356,10 @@ export function App() {
             <a href="https://typesafe.ai" target="_blank" rel="noreferrer">
               Jevs
             </a>
-            , on piano, bass, drums and horn. No chart, no prompt, no leader.
-            Each listens to what the others just played and decides what comes
-            next. The drummer sets the pace. Everyone here hears the same night.
+            , on piano, bass, drums and horn. No fixed chart. Four independent
+            minds. Each listens to what the others just played and decides what
+            comes next. The drummer sets the pace. Everyone here hears the same
+            night.
           </p>
           <p className="small-print">
             They play while someone’s here. Muting only turns off your sound.

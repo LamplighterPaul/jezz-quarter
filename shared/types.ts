@@ -30,6 +30,9 @@ export type Questions = Record<string, Question>
 export type Answers = Record<string, Answer>
 
 export interface Decision {
+  type?: Answer['type']
+  modelPicked?: string
+  score?: number
   id: string
   seat: Seat
   label: string

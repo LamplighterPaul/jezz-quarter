@@ -1,3 +1,5 @@
+import type { Seat } from '../../shared/types.ts'
+import { defaultMix, mixGains, MIX_SEATS, type Mix } from './mix.ts'
 import { midiHz } from '../../shared/theory.ts'
 
 function room(ctx: AudioContext, seconds = 1.6): AudioBuffer {
@@ -18,8 +20,10 @@ function room(ctx: AudioContext, seconds = 1.6): AudioBuffer {
 
 export class Kit {
   readonly ctx: AudioContext
-  private readonly dry: GainNode
-  private readonly wet: GainNode
+  private readonly channels: Record<
+    Seat,
+    { dry: GainNode; wet: GainNode; output: GainNode }
+  >
   private readonly out: GainNode
   private noise: AudioBuffer | null = null
 
@@ -32,15 +36,37 @@ export class Kit {
     comp.ratio.value = 3
     comp.attack.value = 0.004
     comp.release.value = 0.22
-    const verb = ctx.createConvolver()
-    verb.buffer = room(ctx)
-    this.dry = ctx.createGain()
-    this.dry.gain.value = 0.84
-    this.wet = ctx.createGain()
-    this.wet.gain.value = 0.22
-    this.dry.connect(comp)
-    this.wet.connect(verb).connect(comp)
+    const impulse = room(ctx)
+    this.channels = Object.fromEntries(
+      MIX_SEATS.map((seat) => {
+        const output = ctx.createGain()
+        const dry = ctx.createGain()
+        const wet = ctx.createGain()
+        dry.gain.value = 0.84
+        wet.gain.value = 0.22
+        dry.connect(output)
+        if (seat === 'piano' || seat === 'horn') {
+          const verb = ctx.createConvolver()
+          verb.buffer = impulse
+          wet.connect(verb).connect(output)
+        }
+        // Per-instrument output follows its reverb, so mute removes tails too.
+        output.connect(comp)
+        return [seat, { dry, wet, output }]
+      }),
+    ) as Record<Seat, { dry: GainNode; wet: GainNode; output: GainNode }>
     comp.connect(this.out).connect(ctx.destination)
+    this.setMix(defaultMix())
+  }
+
+  setMix(mix: Mix) {
+    const gains = mixGains(mix)
+    for (const seat of MIX_SEATS) {
+      const gain = this.channels[seat].output.gain
+      gain.cancelScheduledValues(this.ctx.currentTime)
+      gain.setValueAtTime(gains[seat], this.ctx.currentTime)
+      gain.value = gains[seat]
+    }
   }
 
   setMuted(muted: boolean) {
@@ -65,8 +91,8 @@ export class Kit {
     )
     const end = at + ring + 0.08
     const body = ctx.createGain()
-    body.connect(this.dry)
-    body.connect(this.wet)
+    body.connect(this.channels.piano.dry)
+    body.connect(this.channels.piano.wet)
     const tone = ctx.createBiquadFilter()
     tone.type = 'lowpass'
     tone.frequency.value = 900 + 7000 * v * v
@@ -113,7 +139,7 @@ export class Kit {
     )
     osc.connect(g)
     sub.connect(g)
-    g.connect(this.dry)
+    g.connect(this.channels.bass.dry)
     osc.start(at)
     osc.stop(at + hold + 0.2)
     sub.start(at)
@@ -135,8 +161,8 @@ export class Kit {
     g.gain.exponentialRampToValueAtTime(0.15 * velocity, at + 0.03)
     g.gain.setValueAtTime(0.12 * velocity, at + Math.max(0.05, hold - 0.05))
     g.gain.exponentialRampToValueAtTime(0.0001, at + hold + 0.08)
-    osc.connect(filt).connect(g).connect(this.dry)
-    g.connect(this.wet)
+    osc.connect(filt).connect(g).connect(this.channels.horn.dry)
+    g.connect(this.channels.horn.wet)
     osc.start(at)
     osc.stop(at + hold + 0.12)
   }
@@ -151,7 +177,7 @@ export class Kit {
       const g = ctx.createGain()
       g.gain.setValueAtTime(0.9 * velocity, at)
       g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22)
-      osc.connect(g).connect(this.dry)
+      osc.connect(g).connect(this.channels.drums.dry)
       osc.start(at)
       osc.stop(at + 0.25)
       return
@@ -167,7 +193,7 @@ export class Kit {
       const gain = ctx.createGain()
       gain.gain.setValueAtTime(0.5 * velocity, at)
       gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.16)
-      osc.connect(gain).connect(this.dry)
+      osc.connect(gain).connect(this.channels.drums.dry)
       osc.start(at)
       osc.stop(at + 0.18)
       return
@@ -200,7 +226,7 @@ export class Kit {
       at + 0.003,
     )
     gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
-    src.connect(filter).connect(gain).connect(this.dry)
+    src.connect(filter).connect(gain).connect(this.channels.drums.dry)
     src.start(at)
     src.stop(at + duration)
     if (kind === 'snare' || kind === 'ride') {
@@ -213,7 +239,7 @@ export class Kit {
         at,
       )
       bodyGain.gain.exponentialRampToValueAtTime(0.0001, at + duration * 0.8)
-      body.connect(bodyGain).connect(this.dry)
+      body.connect(bodyGain).connect(this.channels.drums.dry)
       body.start(at)
       body.stop(at + duration)
     }

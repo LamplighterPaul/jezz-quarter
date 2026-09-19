@@ -1,5 +1,6 @@
 import type { Bar, Note, Seat, Snapshot } from '../../shared/types.ts'
 import { Kit } from './kit.ts'
+import { defaultMix, type Mix } from './mix.ts'
 
 export interface Hooks {
   onSnapshot(s: Snapshot): void
@@ -27,6 +28,7 @@ export class Player {
   private disposed = false
   private connecting = false
   private muted = true
+  private mix = defaultMix()
   private bars = new Map<number, Bar>()
   private readonly hooks: Hooks
 
@@ -38,6 +40,7 @@ export class Player {
     if (!muted && !this.ctx) {
       this.ctx = new AudioContext()
       this.kit = new Kit(this.ctx)
+      this.kit.setMix(this.mix)
       this.kit.setMuted(true)
       try {
         await this.ctx.resume()
@@ -57,6 +60,11 @@ export class Player {
     }
     this.muted = muted
     this.kit?.setMuted(muted)
+  }
+
+  setMix(mix: Mix) {
+    this.mix = mix
+    this.kit?.setMix(mix)
   }
 
   async connect() {

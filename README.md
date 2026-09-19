@@ -19,6 +19,19 @@ Everyone in the room hears the same performance.
 - Empty room: the performance clock pauses. Someone arriving resumes it.
 - Minutes are shared room time, counted once, not multiplied by the audience.
 
+## Local debug mixer
+
+Open [the backstage mixer](https://jezzquarter.zammitpaul.com/?debug) by adding
+`?debug` to the URL. Each instrument has mute, solo, and level controls. You can
+solo several players together. Muting includes their reverb tails. These controls
+change only this browser's output: the band, shared clock, other listeners, and
+Jev history keep going. Use Reset mix to hear all four again.
+
+Each channel also exposes Choice/Score/Noul decisions, original probabilities,
+confidence where supplied, and the result our code actually selected. A sampled
+result can differ from Jev's top Choice. All this is inspection, not a room-wide
+parameter editor. See [the loop review](docs/jev-loop-review.md).
+
 ## The musicians
 
 Each musician gets its own TypeSafe request containing its previous gesture,
