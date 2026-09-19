@@ -1,12 +1,30 @@
 export type Question =
-  | { type: 'noul'; instructions: string; criteria?: { true?: string; false?: string } }
-  | { type: 'choice'; instructions: string; criteria: Record<string, string | null> }
+  | {
+      type: 'noul'
+      instructions: string
+      criteria?: { true?: string; false?: string }
+    }
+  | {
+      type: 'choice'
+      instructions: string
+      criteria: Record<string, string | null>
+    }
   | { type: 'score'; instructions: string; criteria: string[] }
 
 export type Answer =
   | { type: 'noul'; noul: number }
-  | { type: 'choice'; choice: string; probabilities: Record<string, number>; confidence: number }
-  | { type: 'score'; score: number; probabilities: Record<string, number>; confidence: number }
+  | {
+      type: 'choice'
+      choice: string
+      probabilities: Record<string, number>
+      confidence: number
+    }
+  | {
+      type: 'score'
+      score: number
+      probabilities: Record<string, number>
+      confidence: number
+    }
 
 export type Questions = Record<string, Question>
 export type Answers = Record<string, Answer>
@@ -38,7 +56,7 @@ export interface Note {
   midi: number
   velocity: number
   seat: Seat
-  kind?: 'kick' | 'snare' | 'hat' | 'ride' | 'tone'
+  kind?: 'kick' | 'snare' | 'hat' | 'ride' | 'brush' | 'rim' | 'tom' | 'tone'
 }
 
 export interface PianoPart {
@@ -56,6 +74,7 @@ export interface BassPart {
   seat: 'bass'
   rest: boolean
   feel: string
+  energy: number
   motion: string
   target: string
   wander: boolean
@@ -65,6 +84,7 @@ export interface BassPart {
 
 export interface DrumsPart {
   seat: 'drums'
+  bpm: number
   rest: boolean
   kit: string
   density: number
@@ -87,6 +107,7 @@ export interface HornPart {
 export type Part = PianoPart | BassPart | DrumsPart | HornPart
 
 export interface Bar {
+  bpm: number
   index: number
   at: number
   beats: number
@@ -100,6 +121,7 @@ export interface Heard {
   barsSoFar: number
   last: string
   recent: string
+  bpm: number
 }
 
 export interface Snapshot {
@@ -107,6 +129,7 @@ export interface Snapshot {
   playing: boolean
   visitors: number
   minutesPlayed: number
+  countingSince?: string
   barsPlayed: number
   elapsedMs: number
   bars: Bar[]

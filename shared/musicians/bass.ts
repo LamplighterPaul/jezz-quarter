@@ -1,7 +1,8 @@
+import { forMusician } from './context.ts'
 // Bass Jev. Own mind. May lock to what it heard, or wander off and invent a root.
 
 import { NOTE_NAMES, tonicCriteria } from '../theory.ts'
-import { decide, noulYes, sampledChoice } from '../sample.ts'
+import { decide, sampledNoul, sampledChoice, sampledLevel } from '../sample.ts'
 import type { Answers, BassPart, Decision, Heard, Questions } from '../types.ts'
 
 const FEELS = {
@@ -29,7 +30,17 @@ const TARGET = {
 }
 
 export function bassQuestions(heard: Heard): Questions {
-  return {
+  return forMusician('bass', {
+    energy: {
+      type: 'score',
+      instructions: 'How strongly should the bassist articulate the next line?',
+      criteria: [
+        'A gentle underpinning, softly plucked',
+        'A clear conversational walking line',
+        'An assertive, forward-driving line',
+        'An emphatic percussive statement',
+      ],
+    },
     wander: {
       type: 'noul',
       instructions: `You are the bassist. Free jazz, no chart. You heard: ${heard.last} True = invent your own root this bar, even if it disagrees with the piano. False = answer what you heard.`,
@@ -40,7 +51,8 @@ export function bassQuestions(heard: Heard): Questions {
     },
     feel: {
       type: 'choice',
-      instructions: 'How do you time this bar? Walking is common. Silence is allowed. Broken time is allowed.',
+      instructions:
+        'How do you time this bar? Walking is common. Silence is allowed. Broken time is allowed.',
       criteria: FEELS,
     },
     motion: {
@@ -55,36 +67,80 @@ export function bassQuestions(heard: Heard): Questions {
     },
     root: {
       type: 'choice',
-      instructions: 'If you are inventing, which pitch class is home this bar? If you are answering, this is a guess at where the music sat.',
+      instructions:
+        'If you are inventing, which pitch class is home this bar? If you are answering, this is a guess at where the music sat.',
       criteria: tonicCriteria(),
     },
-  }
+  })
 }
 
-export function assembleBass(answers: Answers, heard: Heard, seed: number): { part: BassPart; decisions: Decision[] } {
-  const wander = noulYes(answers, 'wander') >= 0.55
-  const feel = sampledChoice(answers, 'feel', 'walk', seed, 0.04)
-  const motion = sampledChoice(answers, 'motion', 'stay', seed, 0.04)
-  const target = sampledChoice(answers, 'target', wander ? 'own' : 'root', seed, 0.04)
-  const root = sampledChoice(answers, 'root', 'C', seed, 0.06, 1.3)
+export function assembleBass(
+  answers: Answers,
+  heard: Heard,
+  seed: number,
+): { part: BassPart; decisions: Decision[] } {
+  const wander = sampledNoul(answers, 'wander', seed)
+  const feel = sampledChoice(answers, 'feel', 'walk', seed, 0, 1.15)
+  const motion = sampledChoice(answers, 'motion', 'stay', seed, 0, 1.15)
+  const target = sampledChoice(
+    answers,
+    'target',
+    wander ? 'own' : 'root',
+    seed,
+    0,
+    1.15,
+  )
+  const root = sampledChoice(answers, 'root', 'C', seed, 0, 1.2)
   const rest = feel.key === 'rest'
+  const energy = sampledLevel(
+    answers,
+    'energy',
+    ['soft', 'clear', 'driving', 'emphatic'],
+    1,
+    seed,
+    0,
+  ).index
   const decisions: Decision[] = []
-  const w = decide('bass', 'wander', 'Wander', wander ? 'yes' : 'no', answers.wander)
+  const energyDecision = decide(
+    'bass',
+    'energy',
+    'Touch',
+    ['soft', 'clear', 'driving', 'emphatic'][energy],
+    answers.energy,
+  )
+  if (energyDecision) decisions.push(energyDecision)
+  const w = decide(
+    'bass',
+    'wander',
+    'Wander',
+    wander ? 'yes' : 'no',
+    answers.wander,
+  )
   if (w) decisions.push(w)
-  if (feel.decision) decisions.push({ ...feel.decision, seat: 'bass', label: 'Feel' })
-  if (motion.decision) decisions.push({ ...motion.decision, seat: 'bass', label: 'Motion' })
-  if (target.decision) decisions.push({ ...target.decision, seat: 'bass', label: 'Aim' })
-  if (root.decision) decisions.push({ ...root.decision, seat: 'bass', label: 'Pitch' })
-  const rootN = Math.max(0, NOTE_NAMES.indexOf(root.key as (typeof NOTE_NAMES)[number]))
+  if (feel.decision)
+    decisions.push({ ...feel.decision, seat: 'bass', label: 'Feel' })
+  if (motion.decision)
+    decisions.push({ ...motion.decision, seat: 'bass', label: 'Motion' })
+  if (target.decision)
+    decisions.push({ ...target.decision, seat: 'bass', label: 'Aim' })
+  if (root.decision)
+    decisions.push({ ...root.decision, seat: 'bass', label: 'Pitch' })
+  const rootN = Math.max(
+    0,
+    NOTE_NAMES.indexOf(root.key as (typeof NOTE_NAMES)[number]),
+  )
   const part: BassPart = {
     seat: 'bass',
     rest,
     feel: feel.key,
+    energy,
     motion: motion.key,
     target: target.key,
     wander,
     root: rootN,
-    heard: rest ? `tacet after ${heard.barsSoFar}` : `${feel.key} ${wander ? 'own ' + root.key : target.key} ${motion.key}`,
+    heard: rest
+      ? `tacet after ${heard.barsSoFar}`
+      : `${feel.key} ${wander ? 'own ' + root.key : target.key} ${motion.key}`,
   }
   return { part, decisions }
 }
