@@ -1,0 +1,41 @@
+# jezz-quarter behind Cloudflare. Copy to config/deploy.yml and edit.
+#   kamal deploy
+service: jezz-quarter
+image: jezz-quarter
+
+servers:
+  web:
+    hosts:
+      - your.server.ip
+    options:
+      volume:
+        - jezz-quarter-data:/app/data
+
+proxy:
+  host: jezzquarter.example.com
+  app_port: 8787
+  forward_headers: true
+  healthcheck:
+    path: /up
+    interval: 3
+    timeout: 5
+
+env:
+  clear:
+    BPM: 88
+    DAILY_USD_CAP: 3
+    STATS_FILE: /app/data/stats.json
+  secret:
+    - TYPESAFE_API_KEY
+
+registry:
+  server: your.registry
+  username: you
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: amd64
+
+ssh:
+  user: root
