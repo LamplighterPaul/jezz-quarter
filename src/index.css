@@ -580,6 +580,9 @@ summary {
 .debug-decisions {
   font-size: 18px;
   line-height: 1.25;
+  max-height: 28rem;
+  overflow-y: auto;
+  scrollbar-color: #58698c #101521;
 }
 .debug-decisions > div {
   border-top: 1px solid #30374a;

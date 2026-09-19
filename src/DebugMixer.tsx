@@ -132,7 +132,11 @@ export function DebugMixer({ bar, muted, busy, onSound, onMix }: Props) {
                     ' — unplanned time left silent; no replacement notes'}
                 </p>
               )}
-              <div className="debug-decisions">
+              <div
+                className="debug-decisions"
+                tabIndex={0}
+                aria-label={`${names[seat]} decision history`}
+              >
                 {bar?.decisions
                   .filter((decision) => decision.seat === seat)
                   .map((decision) => (
