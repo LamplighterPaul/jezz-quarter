@@ -1,4 +1,7 @@
-# Jev loop review — 19 September 2026
+# Jev loop review — original bar-gesture implementation
+
+This is the review of commit `5be5fda`, before the bass/horn iteration. For the
+current implementation and measured experiments see [Bass and horn](bass-horn-iteration.md).
 
 The musicians must remain independent. No musician gets another musician's
 next-bar answers, and no conductor chooses their harmony. The drummer owns the

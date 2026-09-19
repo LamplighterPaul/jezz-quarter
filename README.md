@@ -34,15 +34,21 @@ parameter editor. See [the loop review](docs/jev-loop-review.md).
 
 ## The musicians
 
-Each musician gets its own TypeSafe request containing its previous gesture,
-recent choices and sounded notes from all four players, repetition/rest counts,
-and recent audience feedback. They cannot inspect the others' next answers.
-Every harness uses all three primitives: **Choice**, **Noul**, and **Score**.
+Each musician has separate requests and private memory. Listening contains only
+notes that have already sounded, with pitch, onset, elapsed duration and dynamics.
+They cannot inspect another player's queued notes, choices or planned releases.
 
-Code turns musical gestures into notes: voicing families, walking lines, swing,
-brushes, fills and melodic shapes. It does not choose a fixed progression or
-force instruments to agree. The drummer chooses tempo; each bar carries its own
-BPM so all listeners schedule the change on the same boundary.
+Bass and horn now build their own lines one note or rest at a time. **Choice**
+selects exact pitch, rhythmic spacing and release; **Noul** decides whether to
+attack; **Score** sets accent. Every semitone in the supported instrument range
+is available. Their renderer performs those choices without adding a walking
+pattern, scale, contour or compulsory resolution. Each next decision sees that
+player's own developing phrase.
+
+Piano and drums retain their existing bar-gesture harnesses. The drummer chooses
+tempo; each bar carries that BPM. See [the bass/horn implementation and
+experiments](docs/bass-horn-iteration.md) for invocation, sampling and current
+planning limits.
 
 See [design and sources](docs/musicians.md) for the TypeSafe contract and the
 Levine passages that informed listening, comping and voicing behavior.
@@ -61,6 +67,10 @@ npm run lint
 
 Without a key this runs a clearly labelled random rehearsal. This service has
 its **own TypeSafe key**; do not reuse the jev-piano keys.
+
+`LINE_POLICY=direct` selects top pitch/duration choices for comparison. The default
+samples their original distributions with no temperature adjustment or probability
+floor; Noul uses a 0.5 threshold and Score controls accent continuously.
 
 `BPM` (default 88) is only a pre-performance fallback; the first drummer decision
 sets the actual tempo. `DAILY_USD_CAP` defaults to 3. `STATS_FILE` defaults to

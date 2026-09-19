@@ -2,17 +2,15 @@ import { mkdir, readFile, writeFile, rename } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 import { AudienceFeedback, type Reaction } from './feedback.ts'
-import { listeningState } from './listening.ts'
+import { compactListening, heardSummary, listeningState } from './listening.ts'
 import { RoomClock } from './clock.ts'
-import { assembleBass, bassQuestions } from '../shared/musicians/bass.ts'
+import { freshMemory, planLine } from './line-player.ts'
 import { assembleDrums, drumsQuestions } from '../shared/musicians/drums.ts'
-import { assembleHorn, hornQuestions } from '../shared/musicians/horn.ts'
 import { assemblePiano, pianoQuestions } from '../shared/musicians/piano.ts'
 import { beatsPerBar, renderBar, type RenderState } from '../shared/render.ts'
 import {
   USD_PER_TOKEN,
   type Bar,
-  type Heard,
   type Snapshot,
   type Stats,
 } from '../shared/types.ts'
@@ -21,6 +19,7 @@ import { ask, live } from './jev.ts'
 export const BPM = Number(process.env.BPM ?? 88)
 const DATA = process.env.STATS_FILE ?? './data/stats.json'
 const KEEP_BARS = 48
+const LINE_POLICY = process.env.LINE_POLICY === 'direct' ? 'direct' : 'sample'
 const DAILY_USD_CAP = Number(process.env.DAILY_USD_CAP ?? 3)
 
 type Client = { id: string; send(data: string): void }
@@ -45,7 +44,8 @@ export class Room {
     )
   }
   private clients = new Set<Client>()
-  private render: RenderState = { lastVoicing: [], lastBass: 38, lastHorn: 64 }
+  private render: RenderState = { lastVoicing: [] }
+  private lineMemory = { bass: freshMemory(), horn: freshMemory() }
   private looping = false
   private seed = (Date.now() ^ 0x9e3779b9) >>> 0
   private spent = 0
@@ -194,30 +194,20 @@ export class Room {
     return this.persistChain
   }
 
-  private heard(): Heard {
-    const last = this.bars.at(-1)
-    const recent = this.bars.slice(-4)
-    return {
-      barsSoFar: this.barCount,
-      bpm: this.tempo,
-      last: last
-        ? `bar ${last.index}: piano ${last.parts.piano.heard}; bass ${last.parts.bass.heard}; drums ${last.parts.drums.heard}; horn ${last.parts.horn.heard}`
-        : 'the room is quiet. this is the first bar of the night. there is no chart.',
-      recent:
-        recent
-          .map(
-            (b) =>
-              `${b.index}: p ${b.parts.piano.heard} / b ${b.parts.bass.heard} / d ${b.parts.drums.heard} / h ${b.parts.horn.heard}`,
-          )
-          .join(' · ') || 'nothing yet',
-    }
-  }
-
   private async nextBar(): Promise<Bar> {
-    const heard = this.heard()
+    const started = performance.now()
     const audience = this.feedback.recent(this.barCount)
     const stateFor = (seat: import('../shared/types.ts').Seat) =>
-      listeningState(seat, this.bars, this.tempo, audience)
+      listeningState(seat, this.bars, this.bpm, audience, this.elapsed() / 1000)
+    const heard = heardSummary(stateFor('piano'), this.barCount)
+    const previous = this.bars.at(-1)
+    const previousEnd = previous
+      ? previous.at + (previous.beats * 60) / previous.bpm
+      : 0
+    // Use the existing lead time, or allow an opening phrase to get started.
+    const planningBudget = previous
+      ? Math.max(250, (previousEnd - this.elapsed() / 1000 - 0.2) * 1000)
+      : 3000
     const today = new Date().toISOString().slice(0, 10)
     if (today !== this.day) {
       this.day = today
@@ -229,23 +219,43 @@ export class Room {
       )
     const seed = (this.seed =
       (Math.imul(this.seed, 1664525) + 1013904223) >>> 0)
-    // Four separate harnesses. Same heard facts. Four independent calls.
-    const [pianoRun, bassRun, drumsRun, hornRun] = await Promise.all([
-      ask(stateFor('piano'), pianoQuestions(heard)),
-      ask(stateFor('bass'), bassQuestions(heard)),
-      ask(stateFor('drums'), drumsQuestions(heard)),
-      ask(stateFor('horn'), hornQuestions(heard)),
+    const accountedAsk: typeof ask = async (state, questions, signal) => {
+      if (this.spent >= DAILY_USD_CAP) throw new Error('Room budget reached')
+      const run = await ask(state, questions, signal)
+      this.spent += run.inputTokens * USD_PER_TOKEN
+      return run
+    }
+    // Four independent musicians. Bass/horn privately chain exact actions.
+    const [pianoRun, bass, drumsRun, horn] = await Promise.all([
+      accountedAsk(compactListening(stateFor('piano')), pianoQuestions(heard)),
+      planLine(
+        'bass',
+        this.barCount,
+        this.lineMemory.bass,
+        () => stateFor('bass'),
+        accountedAsk,
+        planningBudget,
+        LINE_POLICY === 'sample' ? seed ^ 2 : 0,
+      ),
+      accountedAsk(compactListening(stateFor('drums')), drumsQuestions(heard)),
+      planLine(
+        'horn',
+        this.barCount,
+        this.lineMemory.horn,
+        () => stateFor('horn'),
+        accountedAsk,
+        planningBudget,
+        LINE_POLICY === 'sample' ? seed ^ 4 : 0,
+      ),
     ])
     const piano = assemblePiano(pianoRun.answers, heard, seed ^ 1)
-    const bass = assembleBass(bassRun.answers, heard, seed ^ 2)
     const drums = assembleDrums(drumsRun.answers, heard, seed ^ 3)
-    const horn = assembleHorn(hornRun.answers, heard, seed ^ 4)
     this.tempo = drums.part.bpm
     const index = this.barCount++
     const last = this.bars.at(-1)
     const at = Math.max(
       last ? last.at + (last.beats * 60) / last.bpm : 0,
-      this.elapsed() / 1000 + 0.25,
+      this.elapsed() / 1000 + 0.2,
     )
     const bar: Bar = {
       index,
@@ -254,9 +264,9 @@ export class Room {
       beats: beatsPerBar,
       parts: {
         piano: piano.part,
-        bass: bass.part,
+        bass: { ...bass.part, seat: 'bass' },
         drums: drums.part,
-        horn: horn.part,
+        horn: { ...horn.part, seat: 'horn' },
       },
       notes: [],
       decisions: [
@@ -265,10 +275,13 @@ export class Room {
         ...drums.decisions,
         ...horn.decisions,
       ],
-      stats: statsOf(pianoRun, bassRun, drumsRun, hornRun),
+      stats: {
+        ...statsOf(pianoRun, ...bass.runs, drumsRun, ...horn.runs),
+        wallMs: Math.round(performance.now() - started),
+      },
     }
+    this.lineMemory = { bass: bass.memory, horn: horn.memory }
     bar.notes = renderBar(bar, this.render)
-    this.spent += bar.stats.usd
     this.bars.push(bar)
     if (this.bars.length > 400) this.bars = this.bars.slice(-KEEP_BARS)
     return bar
@@ -284,7 +297,7 @@ export class Room {
         const duration = (bar.beats * 60) / bar.bpm
         const due = bar.at + duration
         const wait =
-          due * 1000 - this.elapsed() - Math.min(1600, duration * 750)
+          due * 1000 - this.elapsed() - Math.max(0, duration * 1000 - 100)
         if (wait > 0) await sleep(wait)
       }
     } catch (e) {

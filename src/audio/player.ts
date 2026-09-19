@@ -185,7 +185,10 @@ export class Player {
     if (!kit) return
     const at = start + n.at * beat
     if (at < kit.ctx.currentTime) return
-    const hold = Math.max(0.05, n.beats * beat * 0.9)
+    const hold = Math.max(
+      0.01,
+      n.beats * beat * (n.seat === 'bass' || n.seat === 'horn' ? 1 : 0.9),
+    )
     if (n.seat === 'piano') kit.piano(n.midi, at, hold, n.velocity)
     else if (n.seat === 'bass') kit.bass(n.midi, at, hold, n.velocity)
     else if (n.seat === 'horn') kit.horn(n.midi, at, hold, n.velocity)

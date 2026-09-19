@@ -123,6 +123,15 @@ export function DebugMixer({ bar, muted, busy, onSound, onMix }: Props) {
             </p>
             <details>
               <summary>Jev decisions</summary>
+              {bar && (seat === 'bass' || seat === 'horn') && (
+                <p className="model-answer">
+                  {bar.parts[seat].answeredCalls}/{bar.parts[seat].calls} calls
+                  answered · {bar.parts[seat].policy} ·{' '}
+                  {bar.parts[seat].planningMs} ms · {bar.parts[seat].planning}
+                  {bar.parts[seat].planning !== 'complete' &&
+                    ' — unplanned time left silent; no replacement notes'}
+                </p>
+              )}
               <div className="debug-decisions">
                 {bar?.decisions
                   .filter((decision) => decision.seat === seat)
@@ -166,10 +175,13 @@ export function DebugMixer({ bar, muted, busy, onSound, onMix }: Props) {
       <details className="loop-explainer">
         <summary>How this set is being made</summary>
         <p>
-          Every bar: four parallel calls to Jev, one per musician. Each sees up
-          to eight committed bars and audience reactions. None sees the other
-          players’ next choices. Code samples their answers, turns gestures into
-          notes, then schedules the bar at the drummer’s tempo.
+          Bass and horn each build a private phrase, choosing one note or rest
+          at a time: pitch, spacing, release and touch. Pitch and spacing use
+          Jev’s original probabilities (or top choices in direct mode); Noul
+          uses a 50% threshold, and Score sets accent. Only already-sounded
+          events enter their listening state. Piano and drums still choose bar
+          gestures; the drummer sets BPM. No player sees another player’s future
+          notes.
         </p>
         <p>
           These controls change only the audio mix in this browser. They do not
@@ -183,6 +195,7 @@ export function DebugMixer({ bar, muted, busy, onSound, onMix }: Props) {
                   questions: bar.stats.questions,
                   inputTokens: bar.stats.inputTokens,
                   summedCallMs: bar.stats.ms,
+                  wallMs: bar.stats.wallMs,
                   bar: bar.index + 1,
                   bpm: bar.bpm,
                 },

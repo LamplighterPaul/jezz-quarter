@@ -33,13 +33,21 @@ const fixture = (): Bar => ({
     bass: {
       seat: 'bass',
       rest: false,
-      root: 0,
-      feel: 'walk',
-      motion: 'step_up',
-      target: 'root',
-      wander: false,
-      energy: 1,
-      heard: 'walking',
+      heard: 'C2',
+      planning: 'complete',
+      planningMs: 0,
+      calls: 1,
+      answeredCalls: 1,
+      policy: 'direct',
+      events: [
+        {
+          at: 0.5,
+          midi: 36,
+          duration: 1.5,
+          articulation: 'connected',
+          accent: 2,
+        },
+      ],
     },
     drums: {
       seat: 'drums',
@@ -55,35 +63,33 @@ const fixture = (): Bar => ({
     horn: {
       seat: 'horn',
       rest: false,
-      color: 'blues',
-      shape: 'climb',
-      register: 1,
-      landing: 0,
-      heard: 'climbing',
+      heard: 'Gb4',
+      planning: 'complete',
+      planningMs: 0,
+      calls: 1,
+      answeredCalls: 1,
+      policy: 'direct',
+      events: [
+        { at: 0, midi: 66, duration: 2, articulation: 'detached', accent: 1 },
+      ],
     },
   },
 })
-const state = () => ({
-  lastVoicing: [],
-  lastBass: 38,
-  lastHorn: 64,
-  heardRoot: 0,
-  heardQuality: 'dom7',
-})
+const state = () => ({ lastVoicing: [] })
 
 test('all four independent harnesses use Choice, Noul and Score', () => {
   for (const questions of [
-    pianoQuestions,
-    bassQuestions,
-    drumsQuestions,
-    hornQuestions,
+    () => pianoQuestions(heard),
+    () => bassQuestions(),
+    () => drumsQuestions(heard),
+    () => hornQuestions(),
   ]) {
     assert.deepEqual(
-      new Set(Object.values(questions(heard)).map((q) => q.type)),
+      new Set(Object.values(questions()).map((q) => q.type)),
       new Set(['choice', 'score', 'noul']),
     )
-    for (const q of Object.values(questions(heard)))
-      assert.match(q.instructions, /NEXT gesture/)
+    for (const q of Object.values(questions()))
+      assert.match(q.instructions, /NEXT (gesture|action)/)
   }
 })
 test('the drummer establishes the opening tempo and holds it when no change is chosen', () => {
@@ -110,16 +116,23 @@ test('voicing choices produce distinct notes; rootless omits the root', () => {
   assert.equal(notes[1].length, 3)
   assert.equal(notes[4].length, 1)
 })
-test('bass motion changes the line, and it answers previous harmony rather than new piano choices', () => {
-  const a = fixture()
-  const b = fixture()
-  b.parts.bass.motion = 'step_down'
-  const notes = (bar: Bar) =>
-    renderBar(bar, state()).filter((n) => n.seat === 'bass')
-  assert.notDeepEqual(notes(a), notes(b))
-  b.parts.bass.motion = 'step_up'
+test('bass and horn render exact choices regardless of pianist harmony or renderer history', () => {
+  const a = fixture(),
+    b = fixture()
   b.parts.piano.root = 6
-  assert.deepEqual(notes(a), notes(b))
+  b.parts.piano.quality = 'min7'
+  const lines = (bar: Bar) =>
+    renderBar(bar, state()).filter(
+      (n) => n.seat === 'bass' || n.seat === 'horn',
+    )
+  assert.deepEqual(lines(a), lines(b))
+  const bass = lines(a).find((n) => n.seat === 'bass')!
+  assert.equal(bass.midi, 36)
+  assert.equal(bass.at, 0.5)
+  assert.equal(bass.beats, 1.5)
+  const horn = lines(a).find((n) => n.seat === 'horn')!
+  assert.equal(horn.midi, 66, 'no scale filter or consonance repair')
+  assert.equal(horn.beats, 0.9)
 })
 test('drum textures differ, include audible kick/snare and remain finite within the bar', () => {
   const sets = []
@@ -158,7 +171,7 @@ test('listening state exposes actual played notes, repetition and distinct self 
     ...fixture(),
     index,
   }))
-  const s = listeningState('drums', bars, 120, { boos: 1 })
+  const s = listeningState('drums', bars, 120, { boos: 1 }, 10)
   assert.equal(s.self.instrument, 'drums')
   assert.equal(s.repetition.drums.same_gesture_bars, 4)
   assert.equal(s.recent_bars.length, 4)

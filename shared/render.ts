@@ -1,22 +1,13 @@
-// Code supplies playable technique; each Jev chooses its own gesture.
+// Bass and horn notes are Jev's explicit actions; piano/drums retain their techniques.
 import { noise } from './sample.ts'
-import { ladder, nearestPc, scalePcs, voiceFor, mod12 } from './theory.ts'
+import { voiceFor } from './theory.ts'
+import { lineNotes } from './musicians/line.ts'
 import type { Bar, Note } from './types.ts'
 
 export interface RenderState {
   lastVoicing: number[]
-  lastBass: number
-  lastHorn: number
-  heardRoot?: number
-  heardQuality?: string
-  hornMotif?: number[]
 }
 const BEATS = 4
-const bounded = (midi: number, low: number, high: number) => {
-  while (midi < low) midi += 12
-  while (midi > high) midi -= 12
-  return midi
-}
 
 function pianoNotes(bar: Bar, state: RenderState): Note[] {
   const p = bar.parts.piano
@@ -55,80 +46,6 @@ function pianoNotes(bar: Bar, state: RenderState): Note[] {
       kind: 'tone',
     })),
   )
-}
-
-function bassNotes(bar: Bar, state: RenderState): Note[] {
-  const b = bar.parts.bass
-  if (b.rest) return []
-  const heardRoot = state.heardRoot ?? b.root
-  const third = ['min7', 'halfdim', 'minmaj'].includes(state.heardQuality ?? '')
-    ? 3
-    : 4
-  const root =
-    b.wander || b.target === 'own'
-      ? b.root
-      : mod12(
-          heardRoot +
-            (b.target === 'fifth' ? 7 : b.target === 'third' ? third : 0),
-        )
-  const motion =
-    b.motion === 'step_up'
-      ? 2
-      : b.motion === 'step_down'
-        ? -2
-        : b.motion === 'fifth'
-          ? 7
-          : b.motion === 'leap'
-            ? noise(bar.index, 'leap') > 0.5
-              ? 10
-              : -9
-            : 0
-  const start = bounded(state.lastBass + motion, 28, 55)
-  const dest = bounded(nearestPc(root, start), 28, 55)
-  const vel = 0.4 + 0.11 * b.energy
-  let line: number[]
-  let times: number[]
-  let holds: number[]
-  if (b.feel === 'pedal') {
-    line = [dest]
-    times = [0]
-    holds = [3.7]
-  } else if (b.feel === 'two') {
-    line = [start, dest]
-    times = [0, 2]
-    holds = [1.7, 1.7]
-  } else if (b.feel === 'broken') {
-    line = [start, nearestPc(root + 7, start), dest]
-    times =
-      noise(bar.index, 'bass-time') > 0.5 ? [0.33, 1.66, 3] : [0, 2.33, 3.66]
-    holds = [0.6, 0.6, 0.3]
-  } else {
-    const direction = dest >= start ? 1 : -1
-    const approach = dest - direction
-    line = [
-      start,
-      bounded(
-        nearestPc(root + (bar.index % 2 ? third : 7), start + direction * 3),
-        28,
-        55,
-      ),
-      approach,
-      dest,
-    ]
-    if (b.target === 'approach')
-      line = [start, dest + direction * 2, dest + direction, dest]
-    times = [0, 1, 2, 3]
-    holds = [0.88, 0.88, 0.88, 0.88]
-  }
-  state.lastBass = line.at(-1) ?? dest
-  return line.map((midi, i) => ({
-    at: times[i],
-    beats: holds[i],
-    midi: bounded(midi, 28, 55),
-    velocity: vel * (i % 2 ? 0.88 : 1),
-    seat: 'bass',
-    kind: 'tone',
-  }))
 }
 
 function drumsNotes(bar: Bar): Note[] {
@@ -199,73 +116,13 @@ function drumsNotes(bar: Bar): Note[] {
   return notes
 }
 
-function hornNotes(bar: Bar, state: RenderState): Note[] {
-  const h = bar.parts.horn
-  if (h.rest) return []
-  // Answer the harmony already heard, never peek at this bar's piano decision.
-  const root = state.heardRoot ?? h.landing
-  const pcs = scalePcs(root, h.color)
-  const base = [55, 65, 76, 86][h.register]
-  const dest = bounded(nearestPc(h.landing, base), base - 7, base + 9)
-  const shift = Math.floor(noise(bar.index + 1, 'horn-shift') * 4) - 1
-  const start = ladder(pcs, base, shift)
-  let line: number[]
-  let times: number[]
-  let holds: number[]
-  if (h.shape === 'long') {
-    line = [dest]
-    times = [0.16]
-    holds = [3.45]
-  } else if (h.shape === 'climb' || h.shape === 'fall') {
-    const direction = h.shape === 'climb' ? 1 : -1
-    line = [
-      start,
-      ladder(pcs, start, direction),
-      ladder(pcs, start, direction * 3),
-      dest,
-    ]
-    times = bar.index % 2 ? [0.33, 1, 2.33, 3] : [0, 0.66, 2, 3.33]
-    holds = [0.5, 0.75, 0.5, 0.58]
-  } else if (h.shape === 'motif') {
-    const motif = state.hornMotif ?? [0, 2, -1, 3]
-    line = motif.map((step) => ladder(pcs, start, step))
-    line[line.length - 1] = dest
-    times = [0, 0.66, 1.66, 3]
-    holds = [0.5, 0.6, 0.85, 0.8]
-  } else {
-    line = [start, ladder(pcs, start, bar.index % 2 ? -2 : 2), dest]
-    times = bar.index % 2 ? [0.33, 1.66, 3.33] : [0.66, 2, 3]
-    holds = [0.34, 0.42, 0.7]
-  }
-  if (h.shape !== 'motif' && line.length >= 3)
-    state.hornMotif = [
-      0,
-      line[1] > line[0] ? 1 : -1,
-      line[2] > line[0] ? 2 : -2,
-      0,
-    ]
-  state.lastHorn = line.at(-1) ?? dest
-  return line.map((midi, i) => ({
-    at: times[i],
-    beats: holds[i],
-    midi,
-    velocity: 0.46 + noise(bar.index + i, 'horn-touch') * 0.13,
-    seat: 'horn',
-    kind: 'tone',
-  }))
-}
-
 export function renderBar(bar: Bar, state: RenderState): Note[] {
   const notes = [
     ...pianoNotes(bar, state),
-    ...bassNotes(bar, state),
+    ...lineNotes('bass', bar.parts.bass.events),
     ...drumsNotes(bar),
-    ...hornNotes(bar, state),
+    ...lineNotes('horn', bar.parts.horn.events),
   ]
-  if (!bar.parts.piano.rest) {
-    state.heardRoot = bar.parts.piano.root
-    state.heardQuality = bar.parts.piano.quality
-  } else if (!bar.parts.bass.rest) state.heardRoot = bar.parts.bass.root
   return notes.sort((a, b) => a.at - b.at)
 }
 export const beatsPerBar = BEATS

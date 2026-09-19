@@ -1,3 +1,4 @@
+import type { LineEvent } from './musicians/line.ts'
 export type Question =
   | {
       type: 'noul'
@@ -49,6 +50,7 @@ export interface Stats {
   model: string
   ms: number
   questions: number
+  wallMs?: number
   inputTokens: number
   usd: number
 }
@@ -73,16 +75,18 @@ export interface PianoPart {
   heard: string
 }
 
-export interface BassPart {
-  seat: 'bass'
+export interface LinePart {
   rest: boolean
-  feel: string
-  energy: number
-  motion: string
-  target: string
-  wander: boolean
-  root: number
+  events: LineEvent[]
   heard: string
+  planning: 'complete' | 'deadline' | 'error'
+  planningMs: number
+  calls: number
+  answeredCalls: number
+  policy: 'direct' | 'sample'
+}
+export interface BassPart extends LinePart {
+  seat: 'bass'
 }
 
 export interface DrumsPart {
@@ -97,14 +101,8 @@ export interface DrumsPart {
   heard: string
 }
 
-export interface HornPart {
+export interface HornPart extends LinePart {
   seat: 'horn'
-  rest: boolean
-  color: string
-  shape: string
-  register: number
-  landing: number
-  heard: string
 }
 
 export type Part = PianoPart | BassPart | DrumsPart | HornPart
