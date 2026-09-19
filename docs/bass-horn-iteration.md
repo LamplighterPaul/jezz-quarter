@@ -87,3 +87,26 @@ budget remains in force.
 Tests cover causal listening, private-plan isolation, memory continuity, exact
 rendering of dissonant choices, rests, sampling support, invalid answers, deadlines,
 fractional durations, drummer tempo ownership and existing room/mixer behavior.
+
+## Audition follow-up: musical quality remains unresolved
+
+The user's audition rejected the musical result. Passing execution tests and
+producing varied notes did not establish that the quartet sounded good.
+
+In the six captured production bars, sampling selected a different pitch from
+Jev's top choice on 13 of 16 bass notes and 22 of 29 horn notes. Six of fifteen
+successive bass intervals were at least an octave. These are observations of one
+passage, not proof that every leap was inappropriate, but they expose how much
+of the line came from application randomness.
+
+A separate ten-bar direct-choice experiment added readable last-heard note groups
+and own phrase-note/rhythm arrays. It reduced erratic movement but still produced
+repeated quarter notes and scale-like movement. That musical experiment was not
+promoted to production; replacing randomness with monotony is not a validated
+solution. The current live decision policy remains as described above.
+
+A separate playback error was fixed: the bass synth had generated an equal-level
+sine one octave below every chosen note. It now adds a quieter second harmonic
+above the fundamental. Offline audio measurements at five pitches across the
+supported range confirmed that the unwanted lower-octave component was removed.
+This is a rendering correction, not a claim that musical phrasing is solved.

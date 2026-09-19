@@ -127,9 +127,12 @@ export class Kit {
     const osc = ctx.createOscillator()
     osc.type = 'sine'
     osc.frequency.value = f
-    const sub = ctx.createOscillator()
-    sub.type = 'sine'
-    sub.frequency.value = f * 0.5
+    const harmonic = ctx.createOscillator()
+    harmonic.type = 'sine'
+    // Upper partial of the chosen note, never an additional bass note below it.
+    harmonic.frequency.value = f * 2
+    const harmonicGain = ctx.createGain()
+    harmonicGain.gain.value = 0.22
     const g = ctx.createGain()
     g.gain.setValueAtTime(0.0001, at)
     g.gain.exponentialRampToValueAtTime(0.55 * velocity, at + 0.01)
@@ -138,12 +141,12 @@ export class Kit {
       at + Math.max(0.08, hold + 0.12),
     )
     osc.connect(g)
-    sub.connect(g)
+    harmonic.connect(harmonicGain).connect(g)
     g.connect(this.channels.bass.dry)
     osc.start(at)
     osc.stop(at + hold + 0.2)
-    sub.start(at)
-    sub.stop(at + hold + 0.2)
+    harmonic.start(at)
+    harmonic.stop(at + hold + 0.2)
   }
 
   horn(midi: number, at: number, hold: number, velocity: number) {
